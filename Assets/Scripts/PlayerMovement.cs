@@ -1,12 +1,15 @@
 using System.Collections;
-using System.Collections.Generic;
-using Unity.VisualScripting;
 using UnityEngine;
 
 [RequireComponent(typeof(Collider2D))]
 [RequireComponent(typeof(Rigidbody2D))]
 public class PlayerMovement : MonoBehaviour
 {
+    private const string AnimNameWalking = "IsWalking";
+    private const string AnimNameJump = "Jump";
+    private const string AnimNameInAir = "InAir";
+    private const float AnimDelayInAir = 1f;
+
     [SerializeField] private float _speed;
     [SerializeField] private float _jumpPower;
     [SerializeField] private Animator _animator;
@@ -16,7 +19,13 @@ public class PlayerMovement : MonoBehaviour
     private bool _isGrounded;
     private bool _isJump;
     private bool _isAnimatorWalkingStatusSetted;
-    private Coroutine _timeoutInAirCoroutine;
+    private WaitForSecondsRealtime _inAirDelay;
+    private Coroutine _inAirTimeoutCoroutine;
+
+    private void Awake()
+    {
+        _inAirDelay = new WaitForSecondsRealtime(AnimDelayInAir);
+    }
 
     private void OnEnable()
     {
@@ -33,12 +42,13 @@ public class PlayerMovement : MonoBehaviour
     private void FixedUpdate()
     {
         bool canMove = (_isGrounded || _isJump);
+        bool canJump = _isGrounded && _isJump == false;
 
         if (canMove && Input.GetAxis("Horizontal") != 0)
         {
             Vector3 desiredPosition = transform.right * Input.GetAxis("Horizontal") * _speed * Time.deltaTime;
 
-            _animator.SetBool("IsWalking", true);
+            _animator.SetBool(AnimNameWalking, true);
             _isAnimatorWalkingStatusSetted = false;
 
             _spriteRenderer.flipX = desiredPosition.x < 0;
@@ -50,17 +60,17 @@ public class PlayerMovement : MonoBehaviour
             if (_isAnimatorWalkingStatusSetted == false)
             {
                 _isAnimatorWalkingStatusSetted = true;
-                _animator.SetBool("IsWalking", false);
+                _animator.SetBool(AnimNameWalking, false);
             }
         }
 
-        if (_isGrounded && Input.GetKey(KeyCode.Space))
+        if (canJump && Input.GetKey(KeyCode.Space))
         {
             _isJump = true;
 
-            _animator.SetTrigger("Jump");
+            _animator.SetTrigger(AnimNameJump);
 
-            _timeoutInAirCoroutine = StartCoroutine(TimeoutInAir());
+            _inAirTimeoutCoroutine = StartCoroutine(TimeoutInAir());
 
             GetComponent<Rigidbody2D>().AddForce(transform.up * _jumpPower);
         }
@@ -68,27 +78,27 @@ public class PlayerMovement : MonoBehaviour
 
     private IEnumerator TimeoutInAir()
     {
-        yield return new WaitForSecondsRealtime(0.2f);
+        yield return _inAirDelay;
 
-        _animator.SetBool("InAir", true);
+        _animator.SetBool(AnimNameInAir, true);
     }
 
     private void OnGround()
     {
-        if (_timeoutInAirCoroutine != null)
-            StopCoroutine(_timeoutInAirCoroutine);
+        if (_isJump)
+            StopCoroutine(_inAirTimeoutCoroutine);
 
         _isGrounded = true;
         _isJump = false;
-        _animator.ResetTrigger("Jump");
-        _animator.SetBool("InAir", false);
+        _animator.ResetTrigger(AnimNameJump);
+        _animator.SetBool(AnimNameInAir, false);
     }
 
     private void OnGroundLost()
     {
         _isGrounded = false;
 
-        if (_timeoutInAirCoroutine != null)
-            _animator.SetBool("InAir", true);
+        if (_isJump == false)
+            _animator.SetBool(AnimNameInAir, true);
     }
 }
